@@ -26,9 +26,81 @@ import simpleGit from 'simple-git';
 
 import { _extractDate } from './utils';
 
-///////////////////////
+let you: any;
 
-class You {
+async function Start() {
+  console.log(textStart);
+
+  const myDate: string = await Program.EnterYourDate();
+  let controlYourChose: boolean;
+  let githubLink: string;
+
+  do {
+    githubLink = await Program.MakeMessage(textGitHub);
+    controlYourChose = await Program.CheckYourOpinion(
+      textAskGitHub,
+      githubLink,
+    );
+  } while (controlYourChose === false);
+
+  you = new You(myDate, githubLink);
+  you.changeMyDate();
+
+  const yourBadTime: Array<string> | null = await Program.GetYourBadTime(
+    you.getMyGithubLink(),
+    you.timeZone,
+    you.getMyDate(),
+  );
+
+  if (!yourBadTime) {
+    console.log(textSMT);
+    return;
+  }
+
+  let percent: any;
+
+  do {
+    const input = await Program.MakeMessage(textPercent);
+    try {
+      const checkNum = Number(input);
+      if (100 >= checkNum && checkNum >= 0) {
+        percent = Math.round(checkNum);
+      }
+    } catch (e) {
+      return;
+    }
+  } while (!percent);
+
+  if (percent !== 100 && percent !== 0) {
+    const randomQuantity: number = Math.round(
+      (yourBadTime.length / 100) * percent,
+    );
+    let yourChose: boolean = false;
+    let arrayOfDatesForCommits: Array<string>;
+
+    do {
+      arrayOfDatesForCommits = Program.RandomDatesByCommits(
+        randomQuantity,
+        yourBadTime,
+      );
+      yourChose = await Program.CheckYourOpinion(
+        textAskDates,
+        arrayOfDatesForCommits.join('\n'),
+      );
+    } while (yourChose === false);
+
+    try {
+      const answer = await Program.PushCommits(arrayOfDatesForCommits);
+      console.log(answer);
+    } catch (e) {
+      console.log(textError);
+    }
+  }
+  console.log(textEnd);
+}
+Start();
+
+export class You {
   constructor(isoString: string, githubLink: string) {
     this.yourDate = isoString;
     this.githubLink = githubLink;
@@ -51,237 +123,124 @@ class You {
     return this.githubLink;
   }
 }
-
-async function MakeMessage(text: string): Promise<string> {
-  const rl: readline.Interface = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const message: string = await rl.question(text);
-
-  rl.close();
-  return message;
-}
-
-function CheckYourStartDay(yyyy: string, m: string, d: string): string | null {
-  try {
-    const checkYourDate = new Date(
-      Number(yyyy),
-      Number(m) - 1,
-      Number(d) + 1,
-    ).toISOString();
-    if (checkYourDate > new Date().toISOString()) {
-      log(textErrorDate);
-      throw new Error();
-    }
-    return checkYourDate;
-  } catch (e) {
-    return null;
-  }
-}
-async function CheckYourOpinion(
-  text: string,
-  result: string,
-): Promise<boolean> {
-  const madeChoice: string = await MakeMessage(`${text.concat(result)} : `);
-  return madeChoice !== 'n' ? true : false;
-}
-
-async function EnterYourDate() {
-  let result: string | null;
-
-  do {
-    const year: string = await MakeMessage(textYYYY);
-    const month: string = await MakeMessage(textMM);
-    const day: string = await MakeMessage(textDD);
-    result = CheckYourStartDay(year, month, day);
-    if (result) {
-      const controlYourChose: boolean = await CheckYourOpinion(
-        textAskData,
-        result,
-      );
-      if (!controlYourChose) {
-        result = null;
-      }
-    }
-  } while (!result);
-
-  return result;
-}
-
-async function GetYourBadTime(
-  gitHub: string,
-  timeZone: string,
-  startDate: string,
-) {
-  const response: AxiosResponse<any, any> = await axios.get(gitHub);
-  const $: cheerio.CheerioAPI = cheerio.load(response.data);
-  const pageTitle: string = $('tbody').text();
-  try {
-    const array: Array<string> = pageTitle.split('\n');
-    const noContributionArray: Array<string> = array.filter((s) => {
-      return s.includes('No contributions');
+export class Program {
+  static async MakeMessage(text: string): Promise<string> {
+    const rl: readline.Interface = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
     });
 
-    const changedFormatNoContArray: Array<string> = noContributionArray.map(
-      (s) => {
-        return _extractDate(s, timeZone);
-      },
-    );
-    const daysOfPossibleCommits: Array<string> =
-      changedFormatNoContArray.filter((d) => d >= startDate);
+    const message: string = await rl.question(text);
 
-    log(daysOfPossibleCommits.sort(), TextPossibleCommits);
-    return daysOfPossibleCommits.length !== 0 ? daysOfPossibleCommits : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-function RandomDatesByCommits(
-  quantity: number,
-  yourBadTime: Array<string>,
-): Array<string> {
-  const yourDate: Array<string> = [];
-  while (yourDate.length < quantity) {
-    const randomIndex = Math.floor(Math.random() * yourBadTime.length);
-    const randomElement = yourBadTime[randomIndex];
-
-    if (!yourDate.includes(randomElement)) {
-      yourDate.push(randomElement);
-    }
-  }
-  return yourDate;
-}
-
-async function PushCommits(arrayOfDates: Array<string>) {
-  const FILE_PATH = './data.json';
-  for (let i = 0; i < arrayOfDates.length; i++) {
-    const dateInArray = arrayOfDates[i];
-    const data = { date: dateInArray };
-    await jsonfile.writeFile(FILE_PATH, data);
-    simpleGit()
-      .add([FILE_PATH])
-      .commit(dateInArray, { '--date': dateInArray })
-      .push();
-    console.log(`${textCommit} ${dateInArray}`);
-  }
-  return textDone;
-}
-let you: any;
-(async () => {
-  console.log(textStart);
-  const myDate: string = await EnterYourDate();
-  let controlYourChose: boolean;
-  let githubLink: string;
-  do {
-    githubLink = await MakeMessage(textGitHub);
-    controlYourChose = await CheckYourOpinion(textAskGitHub, githubLink);
-  } while (controlYourChose === false);
-
-  you = new You(myDate, githubLink);
-  you.changeMyDate();
-
-  const yourBadTime: Array<string> | null = await GetYourBadTime(
-    you.getMyGithubLink(),
-    you.timeZone,
-    you.getMyDate(),
-  );
-  if (!yourBadTime) {
-    console.log(textSMT);
-    return;
+    rl.close();
+    return message;
   }
 
-  let percent: any;
-  do {
-    const input = await MakeMessage(textPercent);
+  static CheckYourStartDay(yyyy: string, m: string, d: string): string | null {
     try {
-      const checkNum = Number(input);
-      if (100 >= checkNum && checkNum >= 0) {
-        percent = Math.round(checkNum);
+      const checkYourDate = new Date(
+        Number(yyyy),
+        Number(m) - 1,
+        Number(d) + 1,
+      ).toISOString();
+      if (checkYourDate > new Date().toISOString()) {
+        log(textErrorDate);
+        throw new Error();
       }
+      return checkYourDate;
     } catch (e) {
-      return;
-    }
-  } while (!percent);
-  if (percent !== 100 && percent !== 0) {
-    const randomQuantity: number = Math.round(
-      (yourBadTime.length / 100) * percent,
-    );
-    let yourChose: boolean = false;
-    let arrayOfDatesForCommits: Array<string>;
-    do {
-      arrayOfDatesForCommits = RandomDatesByCommits(
-        randomQuantity,
-        yourBadTime,
-      );
-      yourChose = await CheckYourOpinion(
-        textAskDates,
-        arrayOfDatesForCommits.join('\n'),
-      );
-    } while (yourChose === false);
-
-    try {
-      const answer = await PushCommits(arrayOfDatesForCommits);
-      console.log(answer);
-    } catch (e) {
-      console.log(textError);
+      return null;
     }
   }
-  console.log(textEnd);
-})();
+  static async CheckYourOpinion(
+    text: string,
+    result: string,
+  ): Promise<boolean> {
+    const madeChoice: string = await this.MakeMessage(
+      `${text.concat(result)} : `,
+    );
+    return madeChoice !== 'n' ? true : false;
+  }
 
-////////////////////
+  static async EnterYourDate() {
+    let result: string | null;
 
-// // const FILE_PATH = './data.json';
+    do {
+      const year: string = await this.MakeMessage(textYYYY);
+      const month: string = await this.MakeMessage(textMM);
+      const day: string = await this.MakeMessage(textDD);
+      result = this.CheckYourStartDay(year, month, day);
+      if (result) {
+        const controlYourChose: boolean = await this.CheckYourOpinion(
+          textAskData,
+          result,
+        );
+        if (!controlYourChose) {
+          result = null;
+        }
+      }
+    } while (!result);
 
-// // const DATE = moment().subtract(4, 'd').format();
-// // const data = { date: DATE };
+    return result;
+  }
 
-// // jsonfile.writeFile(FILE_PATH, data);
+  static async GetYourBadTime(
+    gitHub: string,
+    timeZone: string,
+    startDate: string,
+  ) {
+    const response: AxiosResponse<any, any> = await axios.get(gitHub);
+    const $: cheerio.CheerioAPI = cheerio.load(response.data);
+    const pageTitle: string = $('tbody').text();
+    try {
+      const array: Array<string> = pageTitle.split('\n');
+      const noContributionArray: Array<string> = array.filter((s) => {
+        return s.includes('No contributions');
+      });
 
-// // simpleGit().add([FILE_PATH]).commit(DATE, { '--date': DATE }).push();
+      const changedFormatNoContArray: Array<string> = noContributionArray.map(
+        (s) => {
+          return _extractDate(s, timeZone);
+        },
+      );
+      const daysOfPossibleCommits: Array<string> =
+        changedFormatNoContArray.filter((d) => d >= startDate);
 
-// const url = 'https://github.com/Verbinmay';
+      log(daysOfPossibleCommits.sort(), TextPossibleCommits);
+      return daysOfPossibleCommits.length !== 0 ? daysOfPossibleCommits : null;
+    } catch (e) {
+      return null;
+    }
+  }
 
-// // Выполнение GET-запроса к странице
-// axios.get(url).then((response) => {
-//   // Парсинг HTML-кода с использованием cheerio
+  static RandomDatesByCommits(
+    quantity: number,
+    yourBadTime: Array<string>,
+  ): Array<string> {
+    const yourDate: Array<string> = [];
+    while (yourDate.length < quantity) {
+      const randomIndex = Math.floor(Math.random() * yourBadTime.length);
+      const randomElement = yourBadTime[randomIndex];
 
-//   const $ = cheerio.load(response.data);
-//   const pageTitle = $('tbody').text();
-//   const array = pageTitle.split('\n');
-//   const filteredArray = array.filter((s) => {
-//     return s.includes('No contributions');
-//   });
-//   const chance = new Chance();
+      if (!yourDate.includes(randomElement)) {
+        yourDate.push(randomElement);
+      }
+    }
+    return yourDate;
+  }
 
-//   const dateRegex = /\w+,\s(\w+)\s(\d+),\s(\d{4})/;
-
-//   function extractDate(str: string) {
-//     const match = str.match(dateRegex);
-//     if (match) {
-//       const month = match[1];
-//       const day = match[2];
-//       const year = match[3];
-
-//       const date = new Date(`${month} ${day} ${year}`);
-//       date.setHours(chance.integer({ min: 0, max: 24 }));
-//       date.setMinutes(chance.integer({ min: 0, max: 60 }));
-//       date.setSeconds(chance.integer({ min: 0, max: 60 }));
-//       const formattedDate = date
-//         .toISOString()
-//         .replace('.000Z', '')
-//         .concat('+04:00');
-
-//       return formattedDate;
-//     }
-//     return null; // Если дата не найдена
-//   }
-
-//   // Применяем функцию к каждой строке в массиве
-//   const dates = filteredArray.map((s) => {
-//     return extractDate(s);
-//   });
-// });
+  static async PushCommits(arrayOfDates: Array<string>) {
+    const FILE_PATH = './data.json';
+    for (let i = 0; i < arrayOfDates.length; i++) {
+      const dateInArray = arrayOfDates[i];
+      const data = { date: dateInArray };
+      await jsonfile.writeFile(FILE_PATH, data);
+      simpleGit()
+        .add([FILE_PATH])
+        .commit(dateInArray, { '--date': dateInArray })
+        .push();
+      console.log(`${textCommit} ${dateInArray}`);
+    }
+    return textDone;
+  }
+}
