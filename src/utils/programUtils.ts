@@ -138,6 +138,9 @@ export class Program {
         .commit(dateInArray, { '--date': dateInArray })
         .push();
       console.log(`${textCommit} ${dateInArray}`);
+      setTimeout(() => {
+        console.log('перерыв');
+      }, 3000);
     }
     return textDone;
   }
